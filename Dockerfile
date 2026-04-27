@@ -1,7 +1,9 @@
 FROM php:8.2-apache
 
-# Copy project files
+# Install MySQL driver
+RUN docker-php-ext-install pdo pdo_mysql
+
 COPY . /var/www/html/
 
-# Enable Apache rewrite (optional but useful)
 RUN a2enmod rewrite
+RUN chown -R www-data:www-data /var/www/html
