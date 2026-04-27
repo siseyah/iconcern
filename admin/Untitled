@@ -1,0 +1,175 @@
+<?php
+require_once '../config/config.php';
+requireRole(['admin', 'staff']);
+require_once '../includes/auth.php';
+require_once '../includes/concern.php';
+require_once '../includes/college.php';
+
+$auth = new Auth();
+$concern = new Concern();
+$college = new College();
+$db = getDB();
+$user = $auth->getCurrentUser();
+
+// Handle bulk update
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['bulk_update_status']) && !empty($_POST['concern_ids'])) {
+        $concern_ids = $_POST['concern_ids'];
+        $status = $_POST['bulk_status'] ?? '';
+        $notes = $_POST['bulk_notes'] ?? null;
+        if (!empty($status)) {
+            $res = $concern->bulkUpdateStatus($concern_ids, $status, $_SESSION['user_id'], $notes);
+            $success = $res['success'] ? "Updated concerns successfully." : "Failed to update concerns.";
+        } else {
+            $error = "Please select a status to update.";
+        }
+    }
+}
+
+// Filters
+$filters = [];
+$status_filter = $_GET['status'] ?? '';
+$college_filter = $_GET['college_id'] ?? '';
+$category_filter = $_GET['category'] ?? '';
+$search = $_GET['search'] ?? '';
+
+if ($status_filter) $filters['status'] = $status_filter;
+if ($college_filter) $filters['college_id'] = $college_filter;
+if ($user['department_id']) $filters['department_id'] = $user['department_id'];
+elseif ($user['college_id']) $filters['college_id'] = $user['college_id'];
+
+$concerns = $concern->getConcerns($filters);
+
+// Additional search filtering
+if ($search) {
+    $concerns = array_filter($concerns, fn($c) =>
+        stripos($c['concern_text'], $search) !== false ||
+        stripos($c['full_name'], $search) !== false ||
+        stripos($c['email'], $search) !== false
+    );
+}
+
+// Get routing info
+foreach ($concerns as &$c) {
+    $routing = $concern->getRouting($c['concern_id']);
+    $c['routing'] = $routing;
+    if (!empty($routing) && isset($routing[0]['department_name'])) {
+        $c['department_name'] = $routing[0]['department_name'];
+    }
+}
+unset($c);
+
+// Colleges for filter
+$colleges = $college->getColleges();
+?>
+<?php include '../includes/header.php'; ?>
+
+<div class="layout-dashboard">
+    <?php include '../includes/sidebar.php'; ?>
+
+    <main class="main-content">
+        <h1>Manage Concerns</h1>
+
+        <?php if (!empty($error)) : ?>
+            <div class="alert alert-danger"><?php echo $error; ?></div>
+        <?php endif; ?>
+        <?php if (!empty($success)) : ?>
+            <div class="alert alert-success"><?php echo $success; ?></div>
+        <?php endif; ?>
+
+        <!-- Filters -->
+        <form method="GET" class="filter-form">
+            <input type="text" name="search" placeholder="Search by student or concern..." value="<?php echo htmlspecialchars($search); ?>">
+            <select name="status">
+                <option value="">All Status</option>
+                <option value="Pending" <?php echo $status_filter === 'Pending' ? 'selected' : ''; ?>>Pending</option>
+                <option value="In Progress" <?php echo $status_filter === 'In Progress' ? 'selected' : ''; ?>>In Progress</option>
+                <option value="Resolved" <?php echo $status_filter === 'Resolved' ? 'selected' : ''; ?>>Resolved</option>
+            </select>
+            <select name="college_id">
+                <option value="">All Colleges</option>
+                <?php foreach ($colleges as $col) : ?>
+                    <option value="<?php echo $col['college_id']; ?>" <?php echo $college_filter == $col['college_id'] ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($col['college_name']); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <button type="submit" class="btn btn-primary">Apply</button>
+            <a href="concerns.php" class="btn btn-secondary">Clear</a>
+        </form>
+
+        <!-- Bulk Actions -->
+        <form method="POST" id="bulkForm">
+            <input type="hidden" name="bulk_update_status" value="1">
+            <div class="bulk-actions">
+                <select name="bulk_status" required>
+                    <option value="">Select Action</option>
+                    <option value="Pending">Mark as Pending</option>
+                    <option value="In Progress">Mark as In Progress</option>
+                    <option value="Resolved">Mark as Resolved</option>
+                </select>
+                <input type="text" name="bulk_notes" placeholder="Optional notes">
+                <button type="submit" class="btn btn-primary">Apply to Selected</button>
+            </div>
+
+            <!-- Concerns Table -->
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="selectAll" onclick="toggleAll(this)"></th>
+                        <th>ID</th>
+                        <th>Student</th>
+                        <th>College</th>
+                        <th>Department</th>
+                        <th>Concern</th>
+                        <th>Category</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($concerns)) : ?>
+                        <tr><td colspan="10" style="text-align:center;">No concerns found.</td></tr>
+                    <?php else : foreach ($concerns as $c) : ?>
+                        <tr>
+                            <td><input type="checkbox" name="concern_ids[]" value="<?php echo $c['concern_id']; ?>"></td>
+                            <td>#<?php echo $c['concern_id']; ?></td>
+                            <td><?php echo htmlspecialchars($c['full_name']); ?><br><small><?php echo htmlspecialchars($c['email']); ?></small></td>
+                            <td><?php echo htmlspecialchars($c['college_name'] ?? 'N/A'); ?></td>
+                            <td><?php echo $c['department_name'] ?? 'Not routed'; ?></td>
+                            <td><?php echo htmlspecialchars(substr($c['concern_text'], 0, 50)); ?>...</td>
+                            <td><?php echo htmlspecialchars($c['predicted_category'] ?? 'N/A'); ?></td>
+                            <td><?php echo $c['status']; ?></td>
+                            <td><?php echo formatDate($c['created_at']); ?></td>
+                            <td>
+                                <a href="../concern.php?id=<?php echo $c['concern_id']; ?>" class="btn btn-sm btn-primary">View</a>
+                                <?php if (getUserRole() === 'admin') : ?>
+                                    <button type="button" onclick="deleteConcern(<?php echo $c['concern_id']; ?>)" class="btn btn-sm btn-danger">Delete</button>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; endif; ?>
+                </tbody>
+            </table>
+        </form>
+    </main>
+</div>
+
+<script>
+function toggleAll(el){
+    document.querySelectorAll('input[name="concern_ids[]"]').forEach(cb => cb.checked = el.checked);
+}
+
+function deleteConcern(id){
+    if(confirm('Are you sure you want to delete this concern?')){
+        let form = document.createElement('form');
+        form.method='POST';
+        form.innerHTML='<input type="hidden" name="delete_concern" value="1"><input type="hidden" name="delete_concern_id" value="'+id+'">';
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
+
+<?php include '../includes/footer.php'; ?>

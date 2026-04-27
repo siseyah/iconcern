@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-04-26T00:04:15.567896",
+  "accuracy": 1.0,
+  "f1_macro": 0.9874890729319549,
+  "f1_weighted": 0.98505629766289,
+  "holdout_f1_macro": 1.0,
+  "holdout_f1_weighted": 1.0,
+  "noisy_holdout_f1_macro": 0.9874890729319549,
+  "noisy_holdout_f1_weighted": 0.98505629766289,
+  "cv_f1_macro_std": 0.001905291152304178,
+  "cv_f1_weighted_std": 0.002000555709919416,
+  "precision_macro": 1.0,
+  "recall_macro": 1.0,
+  "dataset_samples": 1000,
+  "test_samples": 200,
+  "holdout_samples": 200,
+  "full_dataset_f1_macro": 1.0,
+  "full_dataset_f1_weighted": 1.0,
+  "deduplicated_samples": 1000
+}
