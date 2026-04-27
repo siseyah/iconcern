@@ -1,0 +1,24 @@
+# iconcern - Apache Configuration
+
+# Enable Rewrite Engine
+RewriteEngine On
+
+# Protect sensitive files
+<FilesMatch "\.(sql|pkl|log)$">
+    Deny from all
+</FilesMatch>
+
+# Directory Index
+DirectoryIndex index.php
+
+# PHP Settings
+<IfModule mod_php7.c>
+    php_value upload_max_filesize 5M
+    php_value post_max_size 5M
+    php_value max_execution_time 300
+    php_value max_input_time 300
+</IfModule>
+
+# Error Handling
+ErrorDocument 404 /iconcern/index.php
+
